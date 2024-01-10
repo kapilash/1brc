@@ -67,12 +67,10 @@ public:
     {
         size_t i = 0;
         while (i < size) {
-            size_t city_size = 0;
             const char* city_start = &data[i];
-            while (i < size &&  data[i] != ';') {
-                city_size++;
-                i++;
-            }
+            const char* semi_colon = static_cast<const char*>(std::memchr(&data[i], ';', overlap));
+            size_t city_size = semi_colon - city_start;
+            i = i + city_size;
             std::string city{city_start, city_size};
             i++;
             int16_t temperature = 0;
@@ -187,52 +185,39 @@ int main(int argc, char** argv)
     }
     std::string fname = argv[1];
     size_t fileSize = boost::filesystem::file_size(fname);
-    //size_t worker_size = fileSize / 10;
-    size_t workerSize = fileSize / 8;
+    size_t workerSize = fileSize / 16;
 
     boost::interprocess::file_mapping file(fname.c_str(), boost::interprocess::read_only);
-    auto w1End = nextEnd(file, workerSize);
-    Worker w1(file, 0,  w1End);
-    std::thread t1 (&Worker::execute, &w1);
-    auto w2End = nextEnd(file, w1End + workerSize);
-    Worker w2(file, w1End + 1,   w2End);
-    std::thread t2 (&Worker::execute, &w2);
-    auto w3End = nextEnd(file, w2End + workerSize);
-    Worker w3(file, w2End + 1, w3End );
-    std::thread t3 (&Worker::execute, &w3);
-    auto w4End = nextEnd(file, w3End + workerSize);
-    Worker w4(file, w3End + 1,  w4End);
-    std::thread t4 (&Worker::execute, &w4);
-	auto w5End = nextEnd(file, w4End + workerSize);
-    Worker w5(file, w4End + 1,  w5End);
-    std::thread t5 (&Worker::execute, &w5);
-    auto w6End = nextEnd(file, w5End + workerSize);
-    Worker w6(file, w5End + 1,  w6End);
-    std::thread t6 (&Worker::execute, &w6);
-    auto w7End = nextEnd(file, w6End + workerSize);
-    Worker w7(file, w6End + 1,  w7End);
-    std::thread t7 (&Worker::execute, &w7);
-    Worker w8(file, w7End + 1,  fileSize);
-    std::thread t8 (&Worker::execute, &w8);
 
-    t1.join();
-    t2.join();
-    t3.join();
-    t4.join();
-    t5.join();
-    t6.join();
-    t7.join();
-    t8.join();
+    size_t numThreads = 16;
+    std::vector<Worker*> workerPtrs;
+    size_t start = 0;
+    size_t prevEnd = nextEnd(file, workerSize);
+    workerPtrs.push_back(new Worker(file, start, prevEnd));
+    for (size_t i = 1; i < numThreads - 1; ++i) {
+        size_t currentEnd = nextEnd(file, prevEnd + workerSize);
+        workerPtrs.push_back(new Worker(file, prevEnd + 1, currentEnd));
+        prevEnd = currentEnd;
+    }
+    workerPtrs.push_back(new Worker(file, prevEnd + 1, fileSize));
+    std::vector<std::thread> threads;
+    for (size_t i = 0; i < numThreads; ++i) {
+        std::thread t { &Worker::execute, workerPtrs[i]};
+        threads.push_back(std::move(t));
+    }
+
+    for(auto iter = threads.begin(); iter != threads.end(); iter++) {
+        iter->join();
+    }
    
     WeatherBatch result;
-    w1.collect(result);
-    w2.collect(result);
-    w3.collect(result);
-    w4.collect(result);
-    w5.collect(result);
-    w6.collect(result);
-    w7.collect(result);
-    w8.collect(result);
+    for(auto iter = workerPtrs.begin(); iter != workerPtrs.end(); ++iter) {
+        (*iter)->collect(result);
+    }
+    for(auto p : workerPtrs) {
+        delete p;
+    }
+    workerPtrs.clear();
     result.print(std::cout);
     return 0;
 }
