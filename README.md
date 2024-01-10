@@ -34,6 +34,5 @@ Following are the timings on my machine
  | Implementation   |   Time  |             
  | ---------------- | ------- |
  |[java baseline from gunnarmorling](https://github.com/gunnarmorling/1brc) | ~2 min |
- |[buybackoff's implementation](https://github.com/buybackoff/1brc/) | 8s |
- | this implementation                                               | 6s |
+ | this implementation                                               | 5s |
 --------------------------------------------------------------------------
