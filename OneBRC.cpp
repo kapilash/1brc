@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <vector>
 #include <algorithm>
+#include <string_view>
 
 const size_t overlap = 128; // 100 + ';' + optional negative sign + 2 decimal places + '.' + decimal place + '\n' will fit below 128 bytes
 struct Weather {
@@ -66,12 +67,13 @@ public:
     inline void addBatch(const char* data, size_t size)
     {
         size_t i = 0;
+        std::unordered_map<std::string_view, Weather> table;
         while (i < size) {
             const char* city_start = &data[i];
             const char* semi_colon = static_cast<const char*>(std::memchr(&data[i], ';', overlap));
             size_t city_size = semi_colon - city_start;
             i = i + city_size;
-            std::string city{city_start, city_size};
+            std::string_view city{city_start, city_size};
             i++;
             int16_t temperature = 0;
             int16_t sign = 1;
@@ -86,8 +88,12 @@ public:
                 }
                 i++;
             }
-            cityWeatherMap[city].setTemperature(temperature * sign);
+            table[city].setTemperature(temperature * sign);
             i++;
+        }
+        for (auto iter = table.begin(); iter != table.end(); ++iter) {
+            std::string key {iter->first};
+            cityWeatherMap[key] = iter->second;
         }
     }
 
@@ -185,11 +191,11 @@ int main(int argc, char** argv)
     }
     std::string fname = argv[1];
     size_t fileSize = boost::filesystem::file_size(fname);
-    size_t workerSize = fileSize / 16;
+    size_t workerSize = fileSize / 32;
 
     boost::interprocess::file_mapping file(fname.c_str(), boost::interprocess::read_only);
 
-    size_t numThreads = 16;
+    size_t numThreads = 32;
     std::vector<Worker*> workerPtrs;
     size_t start = 0;
     size_t prevEnd = nextEnd(file, workerSize);
