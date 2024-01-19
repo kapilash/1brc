@@ -18,7 +18,6 @@
 #include <chrono>
 
 const size_t overlap = 128; // 100 + ';' + optional negative sign + 2 decimal places + '.' + decimal place + '\n' will fit below 128 bytes
-                            
 
 struct CityKey {
     std::string_view c;
@@ -79,8 +78,7 @@ struct Weather {
 
 
 class WeatherBatch {
-    //std::unordered_map<std::string, Weather> cityWeatherMap;
-    std::unordered_map<std::string, Weather> cityWeatherMap;
+    std::unordered_map<CityKey, Weather, CityKeyHash> cityWeatherMap;
 
 public:
     WeatherBatch() {
@@ -95,7 +93,6 @@ public:
     inline void addBatch(const char* data, size_t size)
     {
         size_t i = 0;
-        std::unordered_map<CityKey, Weather, CityKeyHash> table;
         while (i < size) {
             const char* city_start = &data[i];
             const char* semi_colon = static_cast<const char*>(std::memchr(&data[i], ';', overlap));
@@ -119,12 +116,8 @@ public:
                 }
                 i++;
             }
-            table[city].setTemperature(temperature * sign);
+            cityWeatherMap[city].setTemperature(temperature * sign);
             i++;
-        }
-        for (auto iter = table.begin(); iter != table.end(); ++iter) {
-            std::string key {iter->first.to_string()};
-            cityWeatherMap[key] = iter->second;
         }
     }
 
@@ -137,9 +130,12 @@ public:
     void print(std::ostream& out) const
     {
         std::vector<std::string> cities;
+        std::unordered_map<std::string, Weather> table;
         cities.reserve(10000);
         for (auto iter= cityWeatherMap.cbegin(); iter != cityWeatherMap.end(); ++iter) {
-            cities.push_back(iter->first);
+            auto city = iter->first.to_string();
+            cities.push_back(city);
+            table[city] = iter->second;
         }
         std::sort(cities.begin(), cities.end());
 
@@ -151,8 +147,8 @@ public:
             }
             isFirst = false;
 			out << city;
-            auto find = cityWeatherMap.find(city);
-            if (find != cityWeatherMap.end()) {
+            auto find = table.find(city);
+            if (find != table.end()) {
                 find->second.print(out);
             }
 		}
@@ -161,16 +157,16 @@ public:
 };
 
 class Worker {
-    size_t start;
-    size_t end;
-    boost::interprocess::file_mapping& file;
+    size_t start = 0;;
+    size_t end = 0;
+    const char* root = nullptr;
     WeatherBatch workerData;
     bool skipBegin;
 public:
-    Worker(boost::interprocess::file_mapping& f , size_t start, size_t end)
+    Worker(const char* ptr,  size_t start, size_t end)
         : start(start)
         , end(end)
-        , file(f)
+        , root(ptr)
         , skipBegin(start != 0)
     {
  
@@ -179,15 +175,13 @@ public:
     
     void execute()
     {
-        boost::interprocess::mapped_region region(file, boost::interprocess::read_only, start , end - start);
-        const char* data = static_cast<const char*>(region.get_address());
-        size_t last_slashn = 0;
+        const char* data =  &root[start]; 
 
-        auto regionSize = region.get_size();
+        auto regionSize = end - start;
         if (regionSize == 0) {
             return;
         }
-        workerData.addBatch(&data[last_slashn], regionSize);
+        workerData.addBatch(data, regionSize);
 	}
 
     WeatherBatch getData() const
@@ -226,18 +220,19 @@ int main(int argc, char** argv)
     size_t workerSize = fileSize / 32;
 
     boost::interprocess::file_mapping file(fname.c_str(), boost::interprocess::read_only);
-
+    boost::interprocess::mapped_region region(file, boost::interprocess::read_only);
+    const char *data = static_cast<const char*>(region.get_address());
     size_t numThreads = 32;
     std::vector<Worker*> workerPtrs;
     size_t start = 0;
     size_t prevEnd = nextEnd(file, workerSize);
-    workerPtrs.push_back(new Worker(file, start, prevEnd));
+    workerPtrs.push_back(new Worker(data, start, prevEnd));
     for (size_t i = 1; i < numThreads - 1; ++i) {
         size_t currentEnd = nextEnd(file, prevEnd + workerSize);
-        workerPtrs.push_back(new Worker(file, prevEnd + 1, currentEnd));
+        workerPtrs.push_back(new Worker(data , prevEnd + 1, currentEnd));
         prevEnd = currentEnd;
     }
-    workerPtrs.push_back(new Worker(file, prevEnd + 1, fileSize));
+    workerPtrs.push_back(new Worker(data , prevEnd + 1, fileSize));
     std::vector<std::thread> threads;
     for (size_t i = 0; i < numThreads; ++i) {
         std::thread t { &Worker::execute, workerPtrs[i]};
