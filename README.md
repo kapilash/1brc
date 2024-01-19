@@ -34,5 +34,6 @@ Following are the timings on my machine
  | Implementation   |   Time  |             
  | ---------------- | ------- |
  |[java baseline from gunnarmorling](https://github.com/gunnarmorling/1brc) | ~2 min |
- | this implementation                                               | 2.8s |
---------------------------------------------------------------------------
+ | c++ implementation from this repo                                        | 2.8s   |
+ | rust implementation from this repo                                       | 4.3s   |
+--------------------------------------------------------------------------------------
