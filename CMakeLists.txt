@@ -17,7 +17,7 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
  add_compile_options(-std=c++20 -O3)
  set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
- add_compile_options( -openmp:experimental /FAc)
+ add_compile_options( /std:c++20 -openmp:experimental /FAc)
 endif()
 
 add_executable(onebrc OneBRC.cpp) 
