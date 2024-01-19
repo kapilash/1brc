@@ -14,8 +14,35 @@
 #include <vector>
 #include <algorithm>
 #include <string_view>
+#include <city.h>
+#include <chrono>
 
 const size_t overlap = 128; // 100 + ';' + optional negative sign + 2 decimal places + '.' + decimal place + '\n' will fit below 128 bytes
+                            
+
+struct CityKey {
+    std::string_view c;
+    uint64_t hash_value = 0;
+
+    bool operator==(const CityKey& other) const  noexcept
+    {
+        return c == other.c;
+    }
+
+    std::string to_string() const noexcept
+    {
+        return std::string{c};
+    }
+};
+
+struct CityKeyHash
+{
+    std::size_t operator()(const CityKey& city) const noexcept
+    {
+        return city.hash_value;
+    }
+};
+
 struct Weather {
     int16_t minTemp = 0;
     int16_t maxTemp = 0;
@@ -52,6 +79,7 @@ struct Weather {
 
 
 class WeatherBatch {
+    //std::unordered_map<std::string, Weather> cityWeatherMap;
     std::unordered_map<std::string, Weather> cityWeatherMap;
 
 public:
@@ -67,13 +95,16 @@ public:
     inline void addBatch(const char* data, size_t size)
     {
         size_t i = 0;
-        std::unordered_map<std::string_view, Weather> table;
+        std::unordered_map<CityKey, Weather, CityKeyHash> table;
         while (i < size) {
             const char* city_start = &data[i];
             const char* semi_colon = static_cast<const char*>(std::memchr(&data[i], ';', overlap));
             size_t city_size = semi_colon - city_start;
+            std::string_view c {city_start, city_size};
             i = i + city_size;
-            std::string_view city{city_start, city_size};
+            CityKey city;
+            city.c = std::move(c);
+            city.hash_value = CityHash64(city_start, city_size);
             i++;
             int16_t temperature = 0;
             int16_t sign = 1;
@@ -92,7 +123,7 @@ public:
             i++;
         }
         for (auto iter = table.begin(); iter != table.end(); ++iter) {
-            std::string key {iter->first};
+            std::string key {iter->first.to_string()};
             cityWeatherMap[key] = iter->second;
         }
     }
@@ -189,6 +220,7 @@ int main(int argc, char** argv)
         std::cout << " Need file Name " << std::endl ;
         return 1;
     }
+    auto start_time = std::chrono::high_resolution_clock::now();
     std::string fname = argv[1];
     size_t fileSize = boost::filesystem::file_size(fname);
     size_t workerSize = fileSize / 32;
@@ -225,5 +257,8 @@ int main(int argc, char** argv)
     }
     workerPtrs.clear();
     result.print(std::cout);
+    auto stop_time = std::chrono::high_resolution_clock::now();
+    auto time_span = std::chrono::duration_cast<std::chrono::milliseconds>(stop_time - start_time);
+    std::cout << time_span <<  std::endl;
     return 0;
 }

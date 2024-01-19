@@ -7,6 +7,7 @@ set(Boost_USE_STATIC_LIBS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 FIND_PACKAGE(Boost REQUIRED COMPONENTS system filesystem date_time)
+FIND_PACKAGE(cityhash CONFIG REQUIRED)
 message(STATUS "Boost_LIBRARIES = ${Boost_LIBRARIES}")
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -23,3 +24,4 @@ add_executable(onebrc OneBRC.cpp)
 
 target_link_libraries(onebrc PRIVATE ${Boost_LIBRARIES})
 target_include_directories(onebrc PRIVATE ${Boost_INCLUDE_DIRS})
+target_link_libraries(onebrc PRIVATE cityhash)
