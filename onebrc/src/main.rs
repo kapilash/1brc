@@ -1,3 +1,5 @@
+extern crate farmhash;
+
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::Read;
@@ -11,6 +13,8 @@ use memmap2::Mmap;
 use rayon::prelude::*;
 use std::time::Instant;
 use memchr::memchr;
+use std::hash::{Hash, Hasher};
+use ahash::AHashMap; 
 
 #[derive(Clone)]
 struct Weather {
@@ -53,7 +57,6 @@ impl fmt::Display for Weather {
     }
 }
 
-
 struct WeatherBatch {
     table: HashMap<String, Weather>
 }
@@ -69,7 +72,7 @@ impl WeatherBatch {
     }
 
     fn new(bytes:&[u8]) -> WeatherBatch {
-        let mut table1 : HashMap<&[u8], Weather> = HashMap::new();
+        let mut table1 : AHashMap<&[u8], Weather> = AHashMap::new();
         table1.reserve(20000);
          let mut pos = 0;
          while pos < bytes.len() {
