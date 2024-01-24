@@ -1,4 +1,4 @@
-extern crate farmhash;
+#![feature(portable_simd)]
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -13,8 +13,9 @@ use memmap2::Mmap;
 use rayon::prelude::*;
 use std::time::Instant;
 use memchr::memchr;
-use std::hash::{Hash, Hasher};
 use ahash::AHashMap; 
+use std::simd;
+use std::simd::cmp::SimdPartialEq;
 
 #[derive(Clone)]
 struct Weather {
@@ -35,6 +36,10 @@ impl Weather {
 
     fn add(&mut self, temperature : i16) -> () {
         self.min_temp = std::cmp::min(self.min_temp, temperature);
+        /*unsafe { 
+            core::intrinsics::atomic_max_seqcst(&mut self.max_temp, temperature);
+            core::intrinsics::atomic_min_seqcst(&mut self.min_temp, temperature);
+        }*/
         self.max_temp = std::cmp::max(self.max_temp, temperature);
         self.net_temp = self.net_temp + i32::from(temperature); 
         self.count =  self.count + 1;
@@ -42,6 +47,10 @@ impl Weather {
 
     fn add_other(&mut self, other:& Weather) {
         self.min_temp = std::cmp::min(self.min_temp, other.min_temp);
+        /*unsafe { 
+            core::intrinsics::atomic_max_seqcst(&mut self.max_temp, other.max_temp);
+            core::intrinsics::atomic_min_seqcst(&mut self.min_temp, other.min_temp);
+        }*/
         self.max_temp = std::cmp::max(self.max_temp, other.max_temp);
         self.net_temp = self.net_temp + other.net_temp;
         self.count = self.count + other.count;
@@ -61,6 +70,33 @@ struct WeatherBatch {
     table: HashMap<String, Weather>
 }
 
+fn semicolon_pos(bytes:&[u8]) -> usize {
+   if bytes.len() < 64 {
+       memchr(b';', &bytes).unwrap()
+   }
+   /*else if bytes.len() < 64 {
+       let smd = simd::u8x32::from_slice(bytes);
+       let semismd = simd::u8x32::splat(b';');
+       let mask = smd.simd_eq(semismd);
+       if let Some(pos) = mask.first_set() {
+           pos
+       } else{
+           32 + semicolon_pos(&bytes[32..])
+       }
+
+   }*/
+   else {
+       let smd = simd::u8x64::from_slice(bytes);
+       let semismd = simd::u8x64::splat(b';');
+       let mask = smd.simd_eq(semismd);
+       if let Some(pos) = mask.first_set() {
+           pos
+       } else {
+           64 + semicolon_pos(&bytes[64..])
+       }
+   }
+}
+
 impl WeatherBatch {
     fn append_to(&self, result:&mut HashMap<String, Weather>) {
         for (key,val) in self.table.iter() {
@@ -76,7 +112,7 @@ impl WeatherBatch {
         table1.reserve(20000);
          let mut pos = 0;
          while pos < bytes.len() {
-             let s = memchr(b';', &bytes[pos..]).unwrap();
+             let s = semicolon_pos(&bytes[pos..]); 
              let city = &bytes[pos..(pos+s)];
              pos = pos + s ;
              pos = pos + 1;
