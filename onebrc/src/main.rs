@@ -72,7 +72,7 @@ struct WeatherBatch {
 
 fn semicolon_pos(bytes:&[u8]) -> usize {
    if bytes.len() < 64 {
-       memchr(b';', &bytes).unwrap()
+       return memchr(b';', &bytes).unwrap();
    }
    /*else if bytes.len() < 64 {
        let smd = simd::u8x32::from_slice(bytes);
@@ -85,15 +85,22 @@ fn semicolon_pos(bytes:&[u8]) -> usize {
        }
 
    }*/
-   else {
-       let smd = simd::u8x64::from_slice(bytes);
-       let semismd = simd::u8x64::splat(b';');
+   let smd = simd::u8x64::from_slice(bytes);
+   let semismd = simd::u8x64::splat(b';');
+   let mask = smd.simd_eq(semismd);
+   if let Some(pos) = mask.first_set() {
+       return pos;
+   } 
+   if bytes.len() < 128 {
+       let smd = simd::u8x64::from_slice(&bytes[64..]);
        let mask = smd.simd_eq(semismd);
        if let Some(pos) = mask.first_set() {
-           pos
-       } else {
-           64 + semicolon_pos(&bytes[64..])
+           return 64 + pos;
        }
+       return 64 + semicolon_pos(&bytes[64..]);
+   }
+   else {
+       memchr(b';', &bytes[64..]).unwrap() + 64  
    }
 }
 
