@@ -34,15 +34,15 @@ impl Weather {
         Weather { min_temp, max_temp, net_temp, count}
     }
 
-    fn add(&mut self, temperature : i16) -> () {
+    fn add(&mut self, temperature : i16) {
         self.min_temp = std::cmp::min(self.min_temp, temperature);
         /*unsafe { 
             core::intrinsics::atomic_max_seqcst(&mut self.max_temp, temperature);
             core::intrinsics::atomic_min_seqcst(&mut self.min_temp, temperature);
         }*/
         self.max_temp = std::cmp::max(self.max_temp, temperature);
-        self.net_temp = self.net_temp + i32::from(temperature); 
-        self.count =  self.count + 1;
+        self.net_temp +=  i32::from(temperature); 
+        self.count +=  1;
     }
 
     fn add_other(&mut self, other:& Weather) {
@@ -52,8 +52,8 @@ impl Weather {
             core::intrinsics::atomic_min_seqcst(&mut self.min_temp, other.min_temp);
         }*/
         self.max_temp = std::cmp::max(self.max_temp, other.max_temp);
-        self.net_temp = self.net_temp + other.net_temp;
-        self.count = self.count + other.count;
+        self.net_temp += other.net_temp;
+        self.count += other.count;
     }
 }
 
@@ -72,7 +72,7 @@ struct WeatherBatch {
 
 fn semicolon_pos(bytes:&[u8]) -> usize {
    if bytes.len() < 64 {
-       return memchr(b';', &bytes).unwrap();
+       return memchr(b';', bytes).unwrap();
    }
    /*else if bytes.len() < 64 {
        let smd = simd::u8x32::from_slice(bytes);
@@ -97,7 +97,7 @@ fn semicolon_pos(bytes:&[u8]) -> usize {
        if let Some(pos) = mask.first_set() {
            return 64 + pos;
        }
-       return 64 + semicolon_pos(&bytes[64..]);
+       64 + semicolon_pos(&bytes[64..])
    }
    else {
        memchr(b';', &bytes[64..]).unwrap() + 64  
@@ -121,12 +121,12 @@ impl WeatherBatch {
          while pos < bytes.len() {
              let s = semicolon_pos(&bytes[pos..]); 
              let city = &bytes[pos..(pos+s)];
-             pos = pos + s ;
-             pos = pos + 1;
+             pos += s ;
+             pos += 1;
              let mut sign:i16 = 1;
              if bytes[pos] == 45 {
                  sign = -1;
-                 pos = pos + 1;
+                 pos += 1;
              }
              let mut temperature : i16 = 0;
              while pos < bytes.len()  && bytes[pos] != 10 {
@@ -134,12 +134,12 @@ impl WeatherBatch {
                      let curr = i16::from(bytes[pos] - 48);
                      temperature = temperature * 10 + curr;
                  }
-                 pos = pos + 1;
+                 pos += 1;
              }
-             pos = pos + 1;
+             pos += 1;
              match table1.get_mut(&city) {
                  Some(v) => {v.add(temperature * sign); },
-                 None => { table1.insert(&city, Weather::new(temperature*sign)); }
+                 None => { table1.insert(city, Weather::new(temperature*sign)); }
              }
          }
          let mut table = HashMap::new();
@@ -158,7 +158,7 @@ fn next_end(file:&mut File, seek_position: u64, buffer:&mut [u8]) -> std::io::Re
         if buffer[pos] == 10 {
             break;
         }
-        pos = pos + 1;
+        pos += 1;
     }
     Ok(seek_position + u64::try_from(pos).unwrap())
 }
@@ -188,9 +188,9 @@ fn chunk_sizes(file_name: &str, chunk_count: u64) -> std::io::Result<Vec<(u64, u
 
 fn main() -> std::io::Result<()> {
     let args:Vec<String> = env::args().skip(1).collect();
-    if args.len() < 1 {
+    if args.is_empty() {
         let custom_error = Error::new(ErrorKind::Other, "Missing file name");
-        return Err(Error::from(custom_error));
+        return Err(custom_error);
     }
     let start = Instant::now();
     let chunk_count = 16;
