@@ -70,6 +70,7 @@ struct WeatherBatch {
     table: HashMap<String, Weather>
 }
 
+#[inline(always)]
 fn semicolon_pos(bytes:&[u8]) -> usize {
    if bytes.len() < 64 {
        return memchr(b';', bytes).unwrap();
@@ -81,7 +82,7 @@ fn semicolon_pos(bytes:&[u8]) -> usize {
        if let Some(pos) = mask.first_set() {
            pos
        } else{
-           32 + semicolon_pos(&bytes[32..])
+           32 +     memchr(b';', &bytes[64..]).unwrap() 
        }
 
    }*/
@@ -97,7 +98,7 @@ fn semicolon_pos(bytes:&[u8]) -> usize {
        if let Some(pos) = mask.first_set() {
            return 64 + pos;
        }
-       64 + semicolon_pos(&bytes[64..])
+       64 + memchr(b';', &bytes[64..]).unwrap()
    }
    else {
        memchr(b';', &bytes[64..]).unwrap() + 64  
